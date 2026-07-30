@@ -1,0 +1,30 @@
+services:
+  web:
+    build: .
+    # Без --reload: uvicorn с reload поднимает reloader + worker — планировщик
+    # стартует в обоих процессах. Для проверки воркера держим один процесс.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      RUN_WORKER: "true"
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres_db
+
+  postgres_db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: my_service_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
