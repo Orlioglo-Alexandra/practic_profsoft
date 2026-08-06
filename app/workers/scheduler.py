@@ -6,11 +6,12 @@ from app.core.config import settings
 from app.db.database import SessionLocal
 from app.services.ai_service import classify
 from app.services.export_service import send_result
+from app.services.index_service import claim_one_idle, index_document, mark_failed_or_retry
 from app.services.task_service import (
     claim_one_pending,
     list_done_for_export,
     mark_done,
-    mark_failed_or_retry,
+    mark_failed_or_retry as mark_task_failed_or_retry,
     mark_sent,
     reset_stuck,
 )
@@ -40,7 +41,7 @@ def process_pending() -> None:
                 result,
             )
         except Exception as exc:
-            mark_failed_or_retry(db, task, str(exc))
+            mark_task_failed_or_retry(db, task, str(exc))
             db.refresh(task)
             if task.status == "failed":
                 logger.warning(
@@ -56,6 +57,49 @@ def process_pending() -> None:
                     task.id,
                     task.external_id,
                     task.attempts,
+                    settings.MAX_ATTEMPTS,
+                    exc,
+                )
+    finally:
+        db.close()
+
+
+def process_idle_documents() -> None:
+    db = SessionLocal()
+    try:
+        document = claim_one_idle(db)
+        if document is None:
+            return
+
+        logger.info(
+            "Document %s (source=%s) claimed, status=syncing",
+            document.id,
+            document.source,
+        )
+        try:
+            index_document(db, document)
+            logger.info(
+                "Document %s (source=%s) status=indexed",
+                document.id,
+                document.source,
+            )
+        except Exception as exc:
+            mark_failed_or_retry(db, document, str(exc))
+            db.refresh(document)
+            if document.status == "failed":
+                logger.warning(
+                    "Document %s (source=%s) status=failed after %d attempts: %s",
+                    document.id,
+                    document.source,
+                    document.attempts,
+                    exc,
+                )
+            else:
+                logger.warning(
+                    "Document %s (source=%s) status=idle, retry %d/%d: %s",
+                    document.id,
+                    document.source,
+                    document.attempts,
                     settings.MAX_ATTEMPTS,
                     exc,
                 )
@@ -112,6 +156,12 @@ def start_scheduler() -> BackgroundScheduler:
         id="process_pending",
     )
     scheduler.add_job(
+        process_idle_documents,
+        "interval",
+        seconds=settings.POLL_INTERVAL,
+        id="process_idle_documents",
+    )
+    scheduler.add_job(
         export_done,
         "interval",
         seconds=settings.POLL_INTERVAL,
@@ -125,7 +175,8 @@ def start_scheduler() -> BackgroundScheduler:
     )
     scheduler.start()
     logger.info(
-        "Scheduler started: process_pending and export_done every %ds, reset_stuck every 60s",
+        "Scheduler started: process_pending, process_idle_documents and export_done "
+        "every %ds, reset_stuck every 60s",
         settings.POLL_INTERVAL,
     )
     return scheduler
