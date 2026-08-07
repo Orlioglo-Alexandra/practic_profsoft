@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     POLL_INTERVAL: int = 5
     STUCK_MINUTES: int = 5
     RUN_WORKER: bool = True
-    EMBED_MODEL: str = "text-embedding-3-small"
-    EMBED_DIM: int = 1536
+    VOYAGE_API_KEY: str = ""
+    EMBED_MODEL: str = "voyage-3.5-lite"
+    EMBED_DIM: int = 1024
     CHAT_MODEL: str = "gpt-4o-mini"
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 75

@@ -67,7 +67,7 @@ def index_document(db: Session, document: Document) -> None:
         mark_indexed(db, document)
         return
 
-    vectors = embed_texts(chunks)
+    vectors = embed_texts(chunks, input_type="document")
     points = [
         PointStruct(
             id=str(uuid.uuid4()),

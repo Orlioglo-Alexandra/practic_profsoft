@@ -4,7 +4,7 @@ from app.vector.qdrant_client import qdrant
 
 
 def search(question: str, k: int) -> list:
-    qvec = embed_texts([question])[0]
+    qvec = embed_texts([question], input_type="query")[0]
     result = qdrant.query_points(
         collection_name=settings.COLLECTION,
         query=qvec,

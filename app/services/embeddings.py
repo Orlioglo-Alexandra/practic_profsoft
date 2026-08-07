@@ -1,38 +1,23 @@
-import hashlib
-import math
-import re
-
-from app.ai.client import client
+from app.ai.voyage_client import voyage_client
 from app.core.config import settings
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
+def embed_texts(texts: list[str], input_type: str | None = None) -> list[list[float]]:
+    """Строит эмбеддинги через Voyage AI.
+
+    input_type: "document" для индексации, "query" для поиска.
+    """
     if not texts:
         return []
-
-    try:
-        response = client.embeddings.create(
-            model=settings.EMBED_MODEL,
-            input=texts,
+    if not settings.VOYAGE_API_KEY:
+        raise RuntimeError(
+            "VOYAGE_API_KEY не задан. Добавьте ключ Voyage AI в .env"
         )
-        by_index = {item.index: item.embedding for item in response.data}
-        return [by_index[i] for i in range(len(texts))]
-    except Exception:
-        # Groq и ряд провайдеров не дают embeddings API — локальный fallback
-        return [_hash_embed(text, settings.EMBED_DIM) for text in texts]
 
-
-def _hash_embed(text: str, dim: int) -> list[float]:
-    tokens = re.findall(r"\w+", text.lower(), flags=re.UNICODE)
-    vec = [0.0] * dim
-    if not tokens:
-        return vec
-
-    for token in tokens:
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        idx = int.from_bytes(digest[:4], "big") % dim
-        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-        vec[idx] += sign
-
-    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-    return [v / norm for v in vec]
+    response = voyage_client.embed(
+        texts=texts,
+        model=settings.EMBED_MODEL,
+        input_type=input_type,
+        output_dimension=settings.EMBED_DIM,
+    )
+    return list(response.embeddings)
